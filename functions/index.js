@@ -1,57 +1,64 @@
 const functions = require("firebase-functions");
 const fetch = globalThis.fetch || require("node-fetch");
-const { GoogleAuth } = require("google-auth-library");
 
 // Enable CORS for all origins
 const cors = require("cors")({ origin: true });
 
-// Use Generative Language API via REST. Model name here uses the Generative API model
-// adjust `GENERATIVE_MODEL` if you have access to a different model.
-const GENERATIVE_MODEL = "models/text-bison-001";
-const GENERATIVE_ENDPOINT = `https://generativelanguage.googleapis.com/v1/${GENERATIVE_MODEL}:generateText`;
+// OpenAI API configuration
+const OPENAI_API_KEY = functions.config().openai?.key;
+const OPENAI_ENDPOINT = "https://api.openai.com/v1/chat/completions";
 
 exports.parseWorkflow = functions.https.onRequest((req, res) => {
   cors(req, res, async () => {
     try {
+      if (!OPENAI_API_KEY) {
+        console.error("OpenAI API key not configured");
+        return res.status(500).json({ error: "OpenAI API key not configured" });
+      }
+
       const { description } = req.body;
 
       if (!description) {
         return res.status(400).json({ error: "description is required" });
       }
 
-      const prompt = `Convert the following workflow into Mermaid flowchart syntax.\nIdentify agents, dependencies, and flow direction.\n\nWorkflow:\n${description}\n\nOutput ONLY Mermaid code.`;
+      const prompt = `Convert the following workflow into Mermaid flowchart syntax.\nIdentify agents, dependencies, and flow direction.\n\nWorkflow:\n${description}\n\nOutput ONLY Mermaid code. Start with 'graph TD' or 'graph LR'.`;
 
-      // Acquire access token via ADC
-      const auth = new GoogleAuth({ scopes: ["https://www.googleapis.com/auth/cloud-platform"] });
-      const client = await auth.getClient();
-      const accessToken = (await client.getAccessToken()).token || (await client.getAccessToken());
-
-      const response = await fetch(GENERATIVE_ENDPOINT, {
+      const response = await fetch(OPENAI_ENDPOINT, {
         method: "POST",
         headers: {
-          Authorization: `Bearer ${accessToken}`,
+          "Authorization": `Bearer ${OPENAI_API_KEY}`,
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          prompt: { text: prompt },
+          model: "gpt-4o-mini",
+          messages: [
+            {
+              role: "system",
+              content: "You are a helpful assistant that converts workflows into Mermaid diagrams. Always output valid Mermaid syntax only, no explanations."
+            },
+            {
+              role: "user",
+              content: prompt
+            }
+          ],
           temperature: 0.2,
-          maxOutputTokens: 1200
+          max_tokens: 1200
         }),
       });
 
       if (!response.ok) {
         const errBody = await response.text();
-        console.error("Generative API error:", response.status, errBody);
-        return res.status(502).json({ error: `Generative API error: ${response.status}` });
+        console.error("OpenAI API error:", response.status, errBody);
+        return res.status(502).json({ error: `OpenAI API error: ${response.status}` });
       }
 
       const json = await response.json();
-      // response.candidates[0].output is typical; handle multiple shapes defensively
-      const mermaid = json?.candidates?.[0]?.output || json?.output?.[0]?.content || json?.candidates?.[0]?.content || json?.text || "";
+      const mermaid = json?.choices?.[0]?.message?.content || "";
 
       if (!mermaid) {
-        console.error('Generative API returned empty output', JSON.stringify(json));
-        return res.status(502).json({ error: "Generative API returned empty output" });
+        console.error('OpenAI returned empty output', JSON.stringify(json));
+        return res.status(502).json({ error: "OpenAI returned empty output" });
       }
 
       res.json({ mermaid });
