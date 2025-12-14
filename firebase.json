@@ -1,0 +1,22 @@
+{
+  "functions": {
+    "source": "functions",
+    "serviceAccountEmail": "try1-7d848@appspot.gserviceaccount.com"
+  },
+  "hosting": {
+    "public": "web/build",
+    "ignore": [
+      "firebase.json",
+      "**/.*",
+      "**/node_modules/**"
+    ],
+    "rewrites": [
+      {
+        "source": "/api/**",
+        "function": "parseWorkflow"
+      }
+    ],
+    "cleanUrls": true,
+    "trailingSlash": false
+  }
+}
