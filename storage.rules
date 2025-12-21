@@ -1,6 +1,18 @@
 rules_version = '2';
 service firebase.storage {
   match /b/{bucket}/o {
+    // AI Workflow diagrams
+    match /diagrams/{diagramId} {
+      allow read, write: if true;
+    }
+    
+    // Integration data - shared between AI-Workflow-Tool and ManPro
+    match /integrations/{integration}/{fileId} {
+      allow read: if true;
+      allow write: if true;
+    }
+    
+    // Fallback - allow all (can be more restrictive in production)
     match /{allPaths=**} {
       allow read, write: if true;
     }
